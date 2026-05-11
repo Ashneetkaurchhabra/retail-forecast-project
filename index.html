@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Retail Sales Forecast Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* ===== MAE Comparison Table ===== */
+        .mae-section {
+            margin-top: 30px;
+        }
+
+        .mae-section h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        .mae-table-wrapper {
+            overflow-x: auto;
+            border-radius: 14px;
+            border: 1px solid var(--card-border);
+        }
+
+        .mae-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+        }
+
+        .mae-table thead tr {
+            background: linear-gradient(135deg, rgba(168,85,247,0.2), rgba(6,182,212,0.2));
+        }
+
+        .mae-table th {
+            padding: 14px 20px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        .mae-table td {
+            padding: 14px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            color: var(--text-secondary);
+            vertical-align: middle;
+        }
+
+        .mae-table tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .mae-table tbody tr:hover td {
+            background: rgba(255,255,255,0.03);
+        }
+
+        .model-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+
+        .model-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .mae-value {
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .badge-best {
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, #10b981, #06b6d4);
+            color: white;
+            margin-left: 8px;
+        }
+
+        .badge-na {
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            background: rgba(255,255,255,0.08);
+            color: var(--text-muted);
+        }
+
+        /* ===== Why LSTM Section ===== */
+        .why-lstm-section {
+            margin-top: 30px;
+        }
+
+        .why-lstm-section h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-primary);
+        }
+
+        .reasons-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+        }
+
+        .reason-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--card-border);
+            border-radius: 14px;
+            padding: 18px;
+            transition: all 0.3s ease;
+        }
+
+        .reason-card:hover {
+            border-color: rgba(168,85,247,0.4);
+            background: rgba(168,85,247,0.06);
+            transform: translateY(-2px);
+        }
+
+        .reason-icon {
+            font-size: 1.6rem;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .reason-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+            margin-bottom: 6px;
+        }
+
+        .reason-desc {
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* ===== Forecast individual cards - 3 column ===== */
+        .cards-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        /* ===== MAE Bar Visual ===== */
+        .mae-bar-wrap {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .mae-bar-bg {
+            flex: 1;
+            height: 6px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .mae-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 1s ease;
+        }
+
+        /* ===== Forecast section note ===== */
+        .forecast-meta {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+
+        .forecast-meta-item {
+            padding: 6px 14px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            font-size: 0.82rem;
+            color: var(--text-secondary);
+        }
+
+        .forecast-meta-item span {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        @media (max-width: 768px) {
+            .cards-grid-3 {
+                grid-template-columns: 1fr;
+            }
+            .reasons-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Loading data...</p>
+    </div>
+
+    <!-- Error Toast -->
+    <div class="toast" id="errorToast">
+        <span class="toast-icon">!</span>
+        <span class="toast-message" id="toastMessage">Error loading data</span>
+        <button class="toast-close" onclick="hideToast()">x</button>
+    </div>
+
+    <div class="container">
+
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>Retail Sales Forecast Dashboard</h1>
+                <p class="subtitle">Walmart Sales Analysis &amp; Prediction &mdash; ARIMA, Holt-Winters, LSTM</p>
+            </div>
+            <div class="header-controls">
+                <div class="toggle-container">
+                    <span class="toggle-label">Data View:</span>
+                    <button class="toggle-btn active" id="avgBtn" onclick="setAggregationType('average')">
+                        Average
+                    </button>
+                    <button class="toggle-btn" id="totalBtn" onclick="setAggregationType('total')">
+                        Total
+                    </button>
+                </div>
+                <button class="sample-btn" onclick="useSampleData()">
+                    Use Sample Data
+                </button>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tabs">
+            <button class="tab active" data-tab="overview" onclick="switchTab('overview')">
+                <span class="tab-icon">&#x1F4C8;</span>
+                Overview
+            </button>
+            <button class="tab" data-tab="analysis" onclick="switchTab('analysis')">
+                <span class="tab-icon">&#x1F50D;</span>
+                Analysis
+            </button>
+            <button class="tab" data-tab="forecast" onclick="switchTab('forecast')">
+                <span class="tab-icon">&#x1F52E;</span>
+                Forecast
+            </button>
+            <button class="tab" data-tab="comparison" onclick="switchTab('comparison')">
+                <span class="tab-icon">&#x2696;</span>
+                Model Comparison
+            </button>
+        </nav>
+
+        <!-- Tab Content -->
+        <main class="main-content">
+
+            <!-- ===================== OVERVIEW TAB ===================== -->
+            <section class="tab-content active" id="overview">
+                <div class="section-header">
+                    <h2>Sales Overview</h2>
+                    <p class="section-note" id="overviewNote">
+                        Each point represents the average sales across all stores for that date.
+                    </p>
+                </div>
+                <div class="cards-grid single">
+                    <div class="card large">
+                        <div class="card-header">
+                            <h3><span id="salesChartTitle">Average Weekly Sales Across Stores</span></h3>
+                            <span class="card-badge">Time Series</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="salesChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stats Cards -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">&#x1F4CA;</div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="totalDataPoints">--</span>
+                            <span class="stat-label">Data Points</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">&#x1F4B0;</div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="avgSales">--</span>
+                            <span class="stat-label">Avg Sales</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">&#x1F4C8;</div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="maxSales">--</span>
+                            <span class="stat-label">Peak Sales</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">&#x1F4C9;</div>
+                        <div class="stat-info">
+                            <span class="stat-value" id="minSales">--</span>
+                            <span class="stat-label">Min Sales</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================== ANALYSIS TAB ===================== -->
+            <section class="tab-content" id="analysis">
+                <div class="section-header">
+                    <h2>Sales Analysis</h2>
+                    <p class="section-note">
+                        Detailed analysis with moving averages and distribution patterns.
+                    </p>
+                </div>
+                <div class="cards-grid">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Moving Average Trend</h3>
+                            <span class="card-badge">4-Week Window</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="movingAvgChart"></canvas>
+                        </div>
+                        <p class="card-note">
+                            Moving average smooths short-term fluctuations to reveal underlying trends.
+                        </p>
+                    </div>
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Sales Distribution</h3>
+                            <span class="card-badge">Histogram</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="histogramChart"></canvas>
+                        </div>
+                        <p class="card-note">
+                            Distribution of weekly sales values across all stores and dates.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================== FORECAST TAB ===================== -->
+            <section class="tab-content" id="forecast">
+                <div class="section-header">
+                    <h2>Sales Forecasting</h2>
+                    <p class="section-note">
+                        10-week predictions using ARIMA, Holt-Winters, and LSTM neural network.
+                    </p>
+                </div>
+
+                <div class="forecast-meta">
+                    <div class="forecast-meta-item">Horizon: <span>10 Weeks</span></div>
+                    <div class="forecast-meta-item">Train Split: <span>80%</span></div>
+                    <div class="forecast-meta-item">LSTM Lookback: <span>10 Steps</span></div>
+                    <div class="forecast-meta-item">LSTM Layers: <span>2 x LSTM + Dense</span></div>
+                </div>
+
+                <div class="cards-grid-3">
+                    <!-- ARIMA -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>ARIMA Forecast</h3>
+                            <span class="card-badge" style="background: linear-gradient(135deg,#06b6d4,#0284c7);">ARIMA</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="arimaChart"></canvas>
+                        </div>
+                        <p class="card-note">
+                            AutoRegressive Integrated Moving Average &mdash; captures linear trends and autocorrelation.
+                        </p>
+                    </div>
+
+                    <!-- Holt-Winters -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Holt-Winters Forecast</h3>
+                            <span class="card-badge" style="background: linear-gradient(135deg,#10b981,#059669);">HW</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="hwChart"></canvas>
+                        </div>
+                        <p class="card-note">
+                            Triple exponential smoothing &mdash; adapts to level, trend, and seasonal patterns.
+                        </p>
+                    </div>
+
+                    <!-- LSTM -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>LSTM Forecast</h3>
+                            <span class="card-badge" style="background: linear-gradient(135deg,#f59e0b,#d97706);">LSTM</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="lstmChart"></canvas>
+                        </div>
+                        <p class="card-note">
+                            Long Short-Term Memory neural network &mdash; learns complex non-linear temporal dependencies.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ===================== COMPARISON TAB ===================== -->
+            <section class="tab-content" id="comparison">
+                <div class="section-header">
+                    <h2>Model Comparison</h2>
+                    <p class="section-note">
+                        Side-by-side evaluation of ARIMA, Holt-Winters, and LSTM &mdash; including MAE scores and reasoning.
+                    </p>
+                </div>
+
+                <!-- All 3 on one chart -->
+                <div class="cards-grid single">
+                    <div class="card large">
+                        <div class="card-header">
+                            <h3>ARIMA vs Holt-Winters vs LSTM</h3>
+                            <span class="card-badge">All Models</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="comparisonChart"></canvas>
+                        </div>
+                        <p class="card-note">
+                            Dashed lines show forecast. Shaded region shows historical data used for training.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- MAE Table -->
+                <div class="card mae-section">
+                    <h3>Mean Absolute Error (MAE) &mdash; Lower is Better</h3>
+                    <div class="mae-table-wrapper">
+                        <table class="mae-table">
+                            <thead>
+                                <tr>
+                                    <th>Model</th>
+                                    <th>MAE Score</th>
+                                    <th>Error Bar</th>
+                                    <th>Verdict</th>
+                                </tr>
+                            </thead>
+                            <tbody id="maeTableBody">
+                                <tr>
+                                    <td>
+                                        <span class="model-dot" style="background:#06b6d4;"></span>
+                                        <span class="model-name">ARIMA</span>
+                                    </td>
+                                    <td><span class="mae-value" id="maeArima" style="color:#06b6d4;">--</span></td>
+                                    <td>
+                                        <div class="mae-bar-wrap">
+                                            <div class="mae-bar-bg">
+                                                <div class="mae-bar-fill" id="maeBarArima" style="background:#06b6d4; width:0%;"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span id="verdictArima">--</span></td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <span class="model-dot" style="background:#10b981;"></span>
+                                        <span class="model-name">Holt-Winters</span>
+                                    </td>
+                                    <td><span class="mae-value" id="maeHW" style="color:#10b981;">--</span></td>
+                                    <td>
+                                        <div class="mae-bar-wrap">
+                                            <div class="mae-bar-bg">
+                                                <div class="mae-bar-fill" id="maeBarHW" style="background:#10b981; width:0%;"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span id="verdictHW">--</span></td>
+                                </tr>
+                                <tr>
+                                    <td>
+                                        <span class="model-dot" style="background:#f59e0b;"></span>
+                                        <span class="model-name">LSTM</span>
+                                    </td>
+                                    <td><span class="mae-value" id="maeLSTM" style="color:#f59e0b;">--</span></td>
+                                    <td>
+                                        <div class="mae-bar-wrap">
+                                            <div class="mae-bar-bg">
+                                                <div class="mae-bar-fill" id="maeBarLSTM" style="background:#f59e0b; width:0%;"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span id="verdictLSTM">--</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Why LSTM -->
+                <div class="card why-lstm-section">
+                    <h3>Why LSTM Outperforms Traditional Models</h3>
+                    <div class="reasons-grid">
+                        <div class="reason-card">
+                            <span class="reason-icon">&#x1F9E0;</span>
+                            <div class="reason-title">Learns Non-Linear Patterns</div>
+                            <div class="reason-desc">
+                                ARIMA and Holt-Winters assume linearity. Retail sales have complex non-linear
+                                relationships between holidays, seasons, and promotions that LSTM captures naturally.
+                            </div>
+                        </div>
+                        <div class="reason-card">
+                            <span class="reason-icon">&#x1F4C6;</span>
+                            <div class="reason-title">Long-Range Memory</div>
+                            <div class="reason-desc">
+                                LSTM gates selectively remember patterns from weeks or months ago &mdash; like annual
+                                Black Friday spikes &mdash; which a simple moving window cannot replicate.
+                            </div>
+                        </div>
+                        <div class="reason-card">
+                            <span class="reason-icon">&#x1F3AF;</span>
+                            <div class="reason-title">No Stationarity Assumption</div>
+                            <div class="reason-desc">
+                                ARIMA requires differencing to handle non-stationary data. LSTM works directly
+                                on raw scaled values without any preprocessing assumptions.
+                            </div>
+                        </div>
+                        <div class="reason-card">
+                            <span class="reason-icon">&#x1F504;</span>
+                            <div class="reason-title">Adapts to Trend Shifts</div>
+                            <div class="reason-desc">
+                                Holt-Winters uses fixed smoothing parameters. LSTM dynamically adapts its
+                                internal weights to handle structural breaks and sudden demand shifts.
+                            </div>
+                        </div>
+                        <div class="reason-card">
+                            <span class="reason-icon">&#x1F4C9;</span>
+                            <div class="reason-title">Captures Volatility</div>
+                            <div class="reason-desc">
+                                Retail sales exhibit high weekly volatility. LSTM's recurrent connections
+                                model the variance in sequences more accurately than parametric models.
+                            </div>
+                        </div>
+                        <div class="reason-card">
+                            <span class="reason-icon">&#x1F680;</span>
+                            <div class="reason-title">Scales with Data</div>
+                            <div class="reason-desc">
+                                With 45 stores and 3 years of weekly data, LSTM has enough samples to learn
+                                generalizable patterns that improve with more training data.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Retail Sales Forecast Dashboard &copy; 2024 &mdash; Walmart Dataset &mdash; ARIMA | Holt-Winters | LSTM</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
